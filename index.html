@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Pixel Plane: City Escape</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Courier New', monospace; }
+        canvas { border: 6px solid #333; background: #5080bf; image-rendering: pixelated; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #ui { position: absolute; color: white; text-align: center; pointer-events: none; width: 400px; }
+        .score { font-size: 48px; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="score" id="score">0</div>
+        <p id="msg" style="font-size: 20px;">PRESSIONE ESPAÇO OU CLIQUE</p>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 400; canvas.height = 600;
+
+    let plane = { x: 50, y: 300, w: 44, h: 28, gravity: 0.5, lift: -8, velocity: 0 };
+    let buildings = [];
+    let frame = 0;
+    let score = 0;
+    let gameActive = false;
+
+    // "Sprite" do Avião em Pixel Art (Matriz 11x7)
+    // 0 = transparente, 1 = vermelho, 2 = azul claro, 3 = branco/hélice, 4 = preto/contorno
+    const planeSprite = [
+        [0,0,0,4,4,4,0,0,0,0,0],
+        [0,4,4,1,1,1,4,4,0,3,0],
+        [4,1,1,1,2,2,1,1,4,3,4],
+        [4,1,1,1,1,1,1,1,1,4,0],
+        [0,4,4,1,1,1,1,1,4,4,0],
+        [0,0,0,4,4,4,4,4,0,0,0],
+        [0,0,0,0,4,4,4,0,0,0,0]
+    ];
+    const colors = ["", "#d63031", "#81ecec", "#ffffff", "#2d3436"];
+
+    function drawPixelPlane() {
+        const pSize = 4; // tamanho de cada "pixel" do avião
+        ctx.save();
+        ctx.translate(plane.x, plane.y);
+        
+        // Inclinação baseada na velocidade
+        let rotation = Math.min(Math.PI/6, Math.max(-Math.PI/6, plane.velocity * 0.05));
+        ctx.rotate(rotation);
+
+        planeSprite.forEach((row, y) => {
+            row.forEach((pixel, x) => {
+                if (pixel !== 0) {
+                    ctx.fillStyle = colors[pixel];
+                    ctx.fillRect(x * pSize, y * pSize, pSize, pSize);
+                }
+            });
+        });
+        ctx.restore();
+    }
+
+    function createBuilding() {
+        let gap = 160;
+        let height = Math.floor(Math.random() * (canvas.height - gap - 100)) + 50;
+        buildings.push({ x: canvas.width, top: height, bottomY: height + gap, w: 70, passed: false, color: '#34495e' });
+    }
+
+    function drawBuildings() {
+        buildings.forEach(b => {
+            // Prédio principal
+            ctx.fillStyle = b.color;
+            ctx.fillRect(b.x, 0, b.w, b.top); // Topo
+            ctx.fillRect(b.x, b.bottomY, b.w, canvas.height - b.bottomY); // Base
+
+            // Detalhes: Janelas Pixeladas
+            ctx.fillStyle = "#f1c40f";
+            for(let py = 10; py < b.top - 10; py += 25) {
+                for(let px = 10; px < b.w - 10; px += 20) {
+                    if(Math.random() > 0.1) ctx.fillRect(b.x + px, py, 8, 12);
+                }
+            }
+            for(let py = b.bottomY + 10; py < canvas.height - 10; py += 25) {
+                for(let px = 10; px < b.w - 10; px += 20) {
+                   if(Math.random() > 0.1) ctx.fillRect(b.x + px, py, 8, 12);
+                }
+            }
+
+            // Antenas no topo dos prédios de baixo
+            ctx.fillStyle = "#2c3e50";
+            ctx.fillRect(b.x + b.w/2 - 2, b.bottomY - 10, 4, 10);
+
+            if (gameActive) b.x -= 3;
+        });
+        buildings = buildings.filter(b => b.x > -100);
+    }
+
+    function update() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Fundo (Nuvens simples)
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillRect(100, 100, 50, 20);
+        ctx.fillRect(250, 200, 80, 25);
+
+        if (gameActive) {
+            plane.velocity += plane.gravity;
+            plane.y += plane.velocity;
+            if (frame % 100 === 0) createBuilding();
+            
+            // Colisões
+            if (plane.y + plane.h > canvas.height || plane.y < 0) endGame();
+            buildings.forEach(b => {
+                if (plane.x + 35 > b.x && plane.x < b.x + b.w && 
+                   (plane.y < b.top || plane.y + 25 > b.bottomY)) endGame();
+                if (!b.passed && plane.x > b.x + b.w) {
+                    score++; b.passed = true;
+                    document.getElementById('score').innerText = score;
+                }
+            });
+        }
+
+        drawBuildings();
+        drawPixelPlane();
+        frame++;
+        requestAnimationFrame(update);
+    }
+
+    function endGame() {
+        gameActive = false;
+        document.getElementById('msg').innerHTML = "BATEU! <br> CLIQUE PARA TENTAR DE NOVO";
+    }
+
+    function reset() {
+        plane.y = 300; plane.velocity = 0; buildings = []; score = 0;
+        document.getElementById('score').innerText = "0";
+        document.getElementById('msg').innerText = "";
+        gameActive = true;
+    }
+
+    window.addEventListener('mousedown', () => gameActive ? plane.velocity = plane.lift : reset());
+    window.addEventListener('keydown', (e) => { if(e.code === 'Space') gameActive ? plane.velocity = plane.lift : reset(); });
+
+    update();
+</script>
+</body>
+</html>
